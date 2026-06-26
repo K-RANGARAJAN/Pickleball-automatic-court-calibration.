@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pickleball keypoint editor</title>
+<style>
+  :root{
+    --bg:#1e1f24; --panel:#26282f; --panel2:#2e313a; --line:#3a3d47;
+    --text:#e7e9ee; --muted:#9aa0ad; --accent:#4c8dff; --good:#3ddc84; --warn:#ffb84c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;
+            background:var(--bg);color:var(--text);overflow:hidden}
+  #app{display:grid;grid-template-columns:230px 1fr 280px;grid-template-rows:48px 1fr;height:100vh}
+  header{grid-column:1/4;display:flex;align-items:center;gap:14px;padding:0 14px;
+         background:var(--panel);border-bottom:1px solid var(--line)}
+  header .title{font-weight:600}
+  header .spacer{flex:1}
+  header .stat{color:var(--muted);font-size:13px}
+  header .stat b{color:var(--text)}
+  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+       border-radius:7px;padding:6px 11px;font-size:13px;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#06122b;font-weight:600}
+  .btn.good{background:var(--good);border-color:var(--good);color:#04210f;font-weight:600}
+  .btn:disabled{opacity:.45;cursor:default}
+
+  /* left list */
+  #left{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  #filter{display:flex;gap:6px;padding:8px}
+  #filter input{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+                color:var(--text);padding:6px 8px;font-size:12px}
+  #list{overflow:auto;flex:1}
+  .row{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:12.5px;cursor:pointer;
+       border-bottom:1px solid #20222899}
+  .row:hover{background:var(--panel2)}
+  .row.sel{background:#33384a}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none;background:#5a5f6b}
+  .dot.reviewed{background:var(--good)}
+  .dot.pred{background:var(--warn)}
+  .row .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* center */
+  #center{position:relative;min-width:0;min-height:0;background:#15161a}
+  #stage{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  #stage.panning{cursor:grabbing}
+  #overlayHelp{position:absolute;left:12px;bottom:10px;font-size:11.5px;color:var(--muted);
+               background:#000a;padding:6px 9px;border-radius:7px;pointer-events:none;line-height:1.5}
+  #zoomctl{position:absolute;right:12px;top:10px;display:flex;gap:6px}
+  .kp-circle{cursor:pointer}
+  .kp-label{font-weight:700;paint-order:stroke;stroke:#000;stroke-width:3px;
+            stroke-linejoin:round;pointer-events:none;user-select:none}
+  .edge{stroke:#000000;stroke-opacity:.85}
+
+  /* right panel */
+  #right{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  #right h3{margin:0;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--line);color:var(--muted);
+            text-transform:uppercase;letter-spacing:.04em}
+  #kplist{overflow:auto;flex:1}
+  .kp{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12.5px;border-bottom:1px solid #20222855;cursor:pointer}
+  .kp:hover{background:var(--panel2)}
+  .kp.sel{background:#33384a;outline:1px solid var(--accent);outline-offset:-1px}
+  .kp .sw{width:13px;height:13px;border-radius:3px;flex:none;border:1px solid #0006}
+  .kp .ix{width:18px;color:var(--muted);text-align:right;flex:none;font-variant-numeric:tabular-nums}
+  .kp .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vis{flex:none;border:1px solid var(--line);border-radius:6px;font-size:11px;padding:3px 7px;min-width:34px;text-align:center}
+  .vis.v2{background:#10351f;color:var(--good);border-color:#1f6a3c}
+  .vis.v1{background:#3a2c10;color:var(--warn);border-color:#7a5a1c}
+  .vis.v0{background:#2a2c33;color:var(--muted)}
+  #foot{padding:10px 12px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+  #foot .line{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+  #saveState{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="title">🎾 Keypoint editor</span>
+    <span class="stat" id="hImg">—</span>
+    <span class="spacer"></span>
+    <span class="stat" id="hProg"></span>
+    <span id="saveState"></span>
+    <button class="btn" id="bPrev">◀ Prev</button>
+    <button class="btn" id="bNext">Next ▶</button>
+    <button class="btn good" id="bNextR">✓ Reviewed + Next</button>
+  </header>
+
+  <aside id="left">
+    <div id="filter">
+      <input id="search" placeholder="filter filename…">
+      <select id="fstatus" class="btn" style="padding:6px">
+        <option value="all">all</option>
+        <option value="todo">to-do</option>
+        <option value="done">reviewed</option>
+        <option value="nopred">no detection</option>
+      </select>
+    </div>
+    <div id="list"></div>
+  </aside>
+
+  <main id="center">
+    <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="zoomctl">
+      <button class="btn" id="bFit" title="Fit to window (F)">Fit</button>
+      <button class="btn" id="bZin">+</button>
+      <button class="btn" id="bZout">−</button>
+    </div>
+    <div id="overlayHelp">
+      drag points to correct · wheel = zoom · drag empty space = pan<br>
+      click a point then press <b>V</b> to cycle visibility · <b>←/→</b> images · <b>F</b> fit
+    </div>
+  </main>
+
+  <aside id="right">
+    <h3>Keypoints</h3>
+    <div id="kplist"></div>
+    <div id="foot">
+      <div class="line">
+        <input type="checkbox" id="autoadv" checked>
+        <label for="autoadv">mark reviewed on “Reviewed + Next”</label>
+      </div>
+      <div class="line">visibility: <span class="vis v2">vis</span><span class="vis v1">occ</span><span class="vis v0">none</span></div>
+      <button class="btn" id="bCopyPrev" title="Copy previous frame's points (C)">Copy prev (C)</button>
+      <button class="btn primary" id="bSave">Save (S)</button>
+    </div>
+  </aside>
+</div>
+
+<script>
+const VIS_LABEL = {2:"vis",1:"occ",0:"none"};
+let META=null, IMAGES=[], cur=-1, rec=null, sel=-1, dirty=false;
+let zoom=1, tx=0, ty=0;                       // scene transform
+const TARGET_PX=6;                            // on-screen point radius
+
+const $=s=>document.querySelector(s);
+const svg=$("#stage");
+const SVGNS="http://www.w3.org/2000/svg";
+
+// ---------- data ----------
+async function boot(){
+  META=await (await fetch("/api/meta")).json();
+  await refreshList();
+  if(IMAGES.length){ const i=IMAGES.findIndex(x=>!x.reviewed); load(i<0?0:i); }
+}
+async function refreshList(){
+  const d=await (await fetch("/api/list")).json();
+  IMAGES=d.images; renderList(); updateProgress();
+}
+function updateProgress(){
+  const done=IMAGES.filter(x=>x.reviewed).length;
+  $("#hProg").innerHTML=`<b>${done}</b> / ${IMAGES.length} reviewed`;
+}
+
+// ---------- left list ----------
+function renderList(){
+  const q=$("#search").value.toLowerCase(), fs=$("#fstatus").value;
+  const box=$("#list"); box.innerHTML="";
+  IMAGES.forEach((im,i)=>{
+    if(q && !im.name.toLowerCase().includes(q)) return;
+    if(fs==="todo" && im.reviewed) return;
+    if(fs==="done" && !im.reviewed) return;
+    if(fs==="nopred" && im.predicted) return;
+    const r=document.createElement("div");
+    r.className="row"+(i===cur?" sel":"");
+    const dot=im.reviewed?"reviewed":(im.predicted?"":"pred");
+    r.innerHTML=`<span class="dot ${dot}"></span><span class="nm">${im.name}</span>`;
+    r.onclick=()=>maybeSaveThen(()=>load(i));
+    box.appendChild(r);
+  });
+}
+$("#search").oninput=renderList;
+$("#fstatus").onchange=renderList;
+
+// ---------- load one image ----------
+async function load(i){
+  if(i<0||i>=IMAGES.length) return;
+  cur=i; sel=-1;
+  const name=IMAGES[i].name;
+  rec=await (await fetch("/api/ann?name="+encodeURIComponent(name))).json();
+  $("#hImg").textContent=`${i+1}/${IMAGES.length}  ·  ${name}  (${rec.width}×${rec.height})`;
+  zoom=1; tx=0; ty=0;
+  buildSvg(); renderList(); renderKpList(); setSaveState(IMAGES[i].reviewed?"reviewed":"");
+  dirty=false;
+}
+
+// ---------- svg ----------
+function buildSvg(){
+  svg.setAttribute("viewBox",`0 0 ${rec.width} ${rec.height}`);
+  svg.setAttribute("preserveAspectRatio","xMidYMid meet");
+  svg.innerHTML="";
+  const scene=document.createElementNS(SVGNS,"g"); scene.id="scene";
+  svg.appendChild(scene);
+
+  const img=document.createElementNS(SVGNS,"image"); img.id="img";
+  img.setAttribute("href","/api/image?name="+encodeURIComponent(rec.name));
+  img.setAttribute("x",0); img.setAttribute("y",0);
+  img.setAttribute("width",rec.width); img.setAttribute("height",rec.height);
+  scene.appendChild(img);
+
+  const edges=document.createElementNS(SVGNS,"g"); edges.id="edges"; scene.appendChild(edges);
+  META.skeleton.forEach(([a,b])=>{
+    const ln=document.createElementNS(SVGNS,"line");
+    ln.classList.add("edge"); ln.setAttribute("vector-effect","non-scaling-stroke");
+    ln.dataset.a=a; ln.dataset.b=b; edges.appendChild(ln);
+  });
+
+  const pts=document.createElementNS(SVGNS,"g"); pts.id="pts"; scene.appendChild(pts);
+  for(let k=0;k<META.num_kpts;k++){
+    const c=document.createElementNS(SVGNS,"circle");
+    c.classList.add("kp-circle"); c.dataset.idx=k;
+    c.setAttribute("vector-effect","non-scaling-stroke");
+    c.setAttribute("fill",META.colors[k]);
+    pts.appendChild(c);
+    const t=document.createElementNS(SVGNS,"text");
+    t.classList.add("kp-label"); t.dataset.idx=k; t.setAttribute("fill","#fff");
+    t.textContent=k; pts.appendChild(t);
+  }
+  applyTransform(); drawPoints();
+}
+function applyTransform(){
+  const s=svg.querySelector("#scene");
+  if(s) s.setAttribute("transform",`translate(${tx} ${ty}) scale(${zoom})`);
+  sizeToScreen();
+}
+function screenScale(){
+  const s=svg.querySelector("#scene"); if(!s) return 1;
+  const m=s.getScreenCTM(); return m?m.a:1;
+}
+function sizeToScreen(){
+  const a=screenScale()||1;
+  const r=TARGET_PX/a, fs=(TARGET_PX*1.15)/a;
+  svg.querySelectorAll(".kp-circle").forEach(c=>{
+    const k=+c.dataset.idx; c.setAttribute("r", (k===sel? r*1.45 : r));
+  });
+  svg.querySelectorAll(".kp-label").forEach(t=>{ t.setAttribute("font-size",fs); });
+}
+function drawPoints(){
+  if(!rec) return;
+  const kp=rec.keypoints;
+  svg.querySelectorAll("#edges line").forEach(ln=>{
+    const a=kp[+ln.dataset.a], b=kp[+ln.dataset.b];
+    ln.setAttribute("x1",a.x); ln.setAttribute("y1",a.y);
+    ln.setAttribute("x2",b.x); ln.setAttribute("y2",b.y);
+    const show=(a.v>0&&b.v>0)?.85:.30;
+    ln.setAttribute("stroke-opacity",show);
+  });
+  svg.querySelectorAll(".kp-circle").forEach(c=>{
+    const k=+c.dataset.idx, p=kp[k];
+    c.setAttribute("cx",p.x); c.setAttribute("cy",p.y);
+    let op=1, sw="#fff", sd="0";
+    if(p.v===2){op=1; sw="#ffffff";}
+    else if(p.v===1){op=.85; sw="#ffd27a"; sd="3,3";}
+    else {op=.30; sw="#9aa0ad"; sd="2,3";}
+    c.setAttribute("fill-opacity",op);
+    c.setAttribute("stroke", k===sel? "#fff" : sw);
+    c.setAttribute("stroke-width", k===sel? 3 : 2);
+    c.setAttribute("stroke-dasharray", k===sel? "0" : sd);
+  });
+  svg.querySelectorAll(".kp-label").forEach(t=>{
+    const k=+t.dataset.idx, p=kp[k];
+    t.setAttribute("x",p.x); t.setAttribute("y",p.y);
+    t.setAttribute("text-anchor","middle"); t.setAttribute("dy","-0.9em");
+    t.setAttribute("opacity", p.v===0? .5 : 1);
+  });
+  sizeToScreen();
+}
+
+// ---------- right keypoint list ----------
+function renderKpList(){
+  const box=$("#kplist"); box.innerHTML="";
+  META.kpt_names.forEach((nm,k)=>{
+    const p=rec.keypoints[k];
+    const row=document.createElement("div");
+    row.className="kp"+(k===sel?" sel":"");
+    row.innerHTML=`<span class="sw" style="background:${META.colors[k]}"></span>
+      <span class="ix">${k}</span><span class="nm">${nm}</span>
+      <span class="vis v${p.v}">${VIS_LABEL[p.v]}</span>`;
+    row.onclick=e=>{ if(e.target.classList.contains("vis")){cycleVis(k);} else {selectKp(k);} };
+    row.querySelector(".vis").onclick=e=>{e.stopPropagation();cycleVis(k);};
+    box.appendChild(row);
+  });
+}
+function selectKp(k){ sel=k; drawPoints(); renderKpList(); renderList(); }
+function cycleVis(k){
+  const p=rec.keypoints[k]; p.v=(p.v+1)%3; sel=k; markDirty();
+  drawPoints(); renderKpList();
+}
+
+// ---------- coordinate helpers ----------
+function clientToScene(ev){
+  const s=svg.querySelector("#scene"); const m=s.getScreenCTM().inverse();
+  const pt=svg.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY;
+  return pt.matrixTransform(m);
+}
+function clientToViewbox(ev){
+  const m=svg.getScreenCTM().inverse();
+  const pt=svg.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY;
+  return pt.matrixTransform(m);
+}
+
+// ---------- pointer interaction ----------
+let drag=null;   // {idx} | {pan:true, lastVB}
+svg.addEventListener("pointerdown",ev=>{
+  if(!rec) return;
+  const tgt=ev.target;
+  if(tgt.classList && tgt.classList.contains("kp-circle")){
+    const k=+tgt.dataset.idx; selectKp(k);
+    drag={idx:k}; svg.setPointerCapture(ev.pointerId);
+  }else{
+    drag={pan:true,last:clientToViewbox(ev)}; svg.classList.add("panning");
+    svg.setPointerCapture(ev.pointerId);
+  }
+});
+svg.addEventListener("pointermove",ev=>{
+  if(!drag) return;
+  if(drag.idx!==undefined){
+    const p=clientToScene(ev);
+    const kp=rec.keypoints[drag.idx];
+    kp.x=Math.max(0,Math.min(rec.width, p.x));
+    kp.y=Math.max(0,Math.min(rec.height,p.y));
+    drag.moved=true; markDirty(); drawPoints();
+  }else if(drag.pan){
+    // clientToViewbox is independent of the scene transform, so the delta is
+    // already in viewBox units (== scene parent units): translate 1:1.
+    const v=clientToViewbox(ev);
+    tx+=(v.x-drag.last.x); ty+=(v.y-drag.last.y);
+    drag.last=v; applyTransform();
+  }
+});
+function endDrag(ev){
+  if(drag && drag.idx!==undefined && drag.moved){
+    const kp=rec.keypoints[drag.idx];
+    if(kp.v===0){ kp.v=2; renderKpList(); }   // placing a not-labeled point labels it
+    drawPoints();
+  }
+  drag=null; svg.classList.remove("panning");
+}
+svg.addEventListener("pointerup",endDrag);
+svg.addEventListener("pointercancel",endDrag);
+
+// wheel zoom toward cursor
+svg.addEventListener("wheel",ev=>{
+  if(!rec) return; ev.preventDefault();
+  const p=clientToViewbox(ev);                 // anchor in viewBox units
+  const local={x:(p.x-tx)/zoom, y:(p.y-ty)/zoom};
+  const factor=ev.deltaY<0?1.15:1/1.15;
+  zoom=Math.max(0.2,Math.min(40,zoom*factor));
+  tx=p.x-zoom*local.x; ty=p.y-zoom*local.y;
+  applyTransform();
+},{passive:false});
+
+function fit(){ zoom=1; tx=0; ty=0; applyTransform(); }
+function zoomBtn(f){
+  if(!rec) return;
+  const anchor={x:rec.width/2, y:rec.height/2};   // zoom around image center
+  const local={x:(anchor.x-tx)/zoom, y:(anchor.y-ty)/zoom};
+  zoom=Math.max(0.2,Math.min(40,zoom*f));
+  tx=anchor.x-zoom*local.x; ty=anchor.y-zoom*local.y; applyTransform();
+}
+$("#bFit").onclick=fit; $("#bZin").onclick=()=>zoomBtn(1.25); $("#bZout").onclick=()=>zoomBtn(1/1.25);
+
+// ---------- save / navigation ----------
+function markDirty(){ dirty=true; setSaveState("unsaved…"); }
+function setSaveState(t){ $("#saveState").textContent=t; }
+async function save(markReviewed){
+  if(!rec) return true;
+  const body={name:rec.name, keypoints:rec.keypoints,
+              reviewed: markReviewed!==undefined? markReviewed : rec.reviewed};
+  const r=await (await fetch("/api/save",{method:"POST",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})).json();
+  if(r.ok){
+    rec.reviewed=r.reviewed; dirty=false;
+    const im=IMAGES[cur]; if(im){ im.reviewed=r.reviewed; }
+    setSaveState(r.wrote_label?"saved ✓":"saved (no box — place ≥2 points)");
+    renderList(); updateProgress();
+    return true;
+  }
+  setSaveState("save error!"); return false;
+}
+async function maybeSaveThen(fn){ if(dirty){ await save(); } fn(); }
+async function go(delta,reviewed){
+  await save(reviewed);
+  let i=cur+delta; if(i<0)i=0; if(i>=IMAGES.length)i=IMAGES.length-1;
+  load(i);
+}
+async function copyPrev(){
+  if(!rec){ return; }
+  if(cur<=0){ setSaveState("no previous image"); return; }
+  if(dirty){ await save(); }
+  const prevName=IMAGES[cur-1].name;
+  const prev=await (await fetch("/api/ann?name="+encodeURIComponent(prevName))).json();
+  if(!prev||!Array.isArray(prev.keypoints)||prev.keypoints.length!==META.num_kpts){
+    setSaveState("previous has no labels"); return;
+  }
+  rec.keypoints=prev.keypoints.map(k=>({x:k.x,y:k.y,v:k.v}));
+  drawPoints(); renderKpList(); markDirty(); await save();
+  setSaveState("copied from previous ✓");
+}
+$("#bPrev").onclick=()=>go(-1);
+$("#bNext").onclick=()=>go(1);
+$("#bNextR").onclick=()=>go(1, $("#autoadv").checked? true : rec.reviewed);
+$("#bCopyPrev").onclick=copyPrev;
+$("#bSave").onclick=()=>save();
+
+// ---------- keyboard ----------
+window.addEventListener("keydown",ev=>{
+  if(ev.target.tagName==="INPUT"||ev.target.tagName==="SELECT") return;
+  const k=ev.key.toLowerCase();
+  if(k==="arrowright"){ev.preventDefault();go(1);}
+  else if(k==="arrowleft"){ev.preventDefault();go(-1);}
+  else if(k==="v"){ if(sel>=0){cycleVis(sel);} }
+  else if(k==="s"){ev.preventDefault();save();}
+  else if(k==="f"){fit();}
+  else if(k==="r"){ if(rec){save(!rec.reviewed);} }
+  else if(k==="c"){ ev.preventDefault(); copyPrev(); }
+  else if(/^[0-9]$/.test(k)){ const n=+k; if(n<META.num_kpts) selectKp(n); }
+});
+window.addEventListener("resize",sizeToScreen);
+window.addEventListener("beforeunload",e=>{ if(dirty){e.preventDefault();e.returnValue="";} });
+
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# YOLO-pose dataset — pickleball court (12 keypoints)
+# Place this file at pb_dataset/data.yaml (or update `path` to an absolute path).
+
+path: ./pb_dataset          # dataset root (relative to where you launch training, or make absolute)
+train: images/train
+val: images/val
+
+# single object class
+nc: 1
+names:
+  0: court
+
+# 12 keypoints, each (x, y, visibility)  -> 2 visible / 1 occluded / 0 not-labeled
+kpt_shape: [12, 3]
+
+# left<->right mirror map for horizontal-flip augmentation.
+# index i maps to the keypoint it becomes when the image is flipped L-R.
+# (background L/mid/R -> R/mid/L, etc.) MUST match your labeling order.
+flip_idx: [2, 1, 0, 5, 4, 3, 8, 7, 6, 11, 10, 9]
+
+# reference only (not used by the trainer):
+# 0 bg baseline L   1 bg baseline mid   2 bg baseline R
+# 3 bg kitchen R    4 bg kitchen mid    5 bg kitchen L
+# 6 fg kitchen L    7 fg kitchen mid    8 fg kitchen R
+# 9 fg baseline R   10 fg baseline mid  11 fg baseline L

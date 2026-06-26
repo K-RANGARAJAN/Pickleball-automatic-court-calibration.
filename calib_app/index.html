@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Court Calibration</title>
+<style>
+  :root{
+    --beige:#f4ecdd; --beige2:#ece0c8; --ink:#1c1b18; --ink2:#5d564a;
+    --black:#141210; --accent:#2ecc71; --warn:#c8841f; --bad:#c0392b; --blue:#2f6fb0;
+    --card:#fffaf0;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;font-family:'Segoe UI',system-ui,sans-serif;color:var(--ink);
+            background:var(--beige);overflow:hidden;}
+
+  /* ---------- floating court / ball motif background ---------- */
+  .bg{position:fixed;inset:0;z-index:0;overflow:hidden;
+      background:linear-gradient(135deg,#f6efe1 0%,#efe3cc 50%,#f3ead8 100%);}
+  .bg svg{position:absolute;opacity:.16;animation:drift linear infinite;}
+  .m1{width:220px;top:8%;left:6%;animation-duration:34s;}
+  .m2{width:150px;top:62%;left:12%;animation-duration:42s;animation-direction:reverse;}
+  .m3{width:300px;top:24%;right:8%;animation-duration:50s;}
+  .m4{width:120px;bottom:10%;right:18%;animation-duration:38s;animation-direction:reverse;}
+  .m5{width:90px;top:48%;left:46%;animation-duration:46s;}
+  @keyframes drift{
+    0%{transform:translate(0,0) rotate(0deg);}
+    25%{transform:translate(30px,-25px) rotate(6deg);}
+    50%{transform:translate(-20px,20px) rotate(-4deg);}
+    75%{transform:translate(15px,30px) rotate(3deg);}
+    100%{transform:translate(0,0) rotate(0deg);}
+  }
+
+  /* ---------- view system (SPA) ---------- */
+  .view{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;
+        align-items:center;justify-content:center;padding:32px;
+        opacity:0;transform:translateY(18px) scale(.99);pointer-events:none;
+        transition:opacity .5s ease, transform .5s ease;}
+  .view.active{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;}
+
+  /* ---------- landing ---------- */
+  .logo{width:118px;height:118px;margin-bottom:18px;filter:drop-shadow(0 6px 14px rgba(0,0,0,.12));}
+  h1.title{margin:0;font-size:34px;font-weight:700;letter-spacing:-.5px;}
+  p.sub{margin:10px 0 34px;color:var(--ink2);font-size:15px;max-width:440px;text-align:center;line-height:1.5;}
+  .choices{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;}
+  .btn{background:var(--black);color:#fff;border:0;border-radius:16px;padding:18px 30px;
+       font-size:16px;font-weight:600;cursor:pointer;min-width:210px;
+       box-shadow:0 6px 18px rgba(20,18,16,.22);
+       transition:transform .18s ease, box-shadow .18s ease, background .18s ease;}
+  .btn:hover{transform:translateY(-3px);box-shadow:0 12px 26px rgba(20,18,16,.30);background:#000;}
+  .btn:active{transform:translateY(-1px);}
+  .btn .ico{display:block;font-size:24px;margin-bottom:6px;}
+
+  /* ---------- mode view (fills the browser window) ---------- */
+  #view-mode{padding:0;}
+  .panel{background:var(--card);border:0;border-radius:0;
+         width:100vw;height:100vh;max-height:none;overflow:hidden;padding:18px 22px;
+         display:flex;flex-direction:column;}
+  .panelhead{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex:0 0 auto;}
+  .back{background:#efe6d2;border:1px solid #e0d3b6;border-radius:12px;padding:9px 14px;
+        cursor:pointer;font-size:14px;font-weight:600;color:var(--ink);transition:background .15s;}
+  .back:hover{background:#e7dabf;}
+  .panelhead h2{margin:0;font-size:20px;font-weight:700;}
+  .grid{display:flex;gap:18px;flex:1 1 auto;min-height:0;}
+  .stage{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;min-height:0;}
+  .side{width:300px;flex:0 0 300px;overflow:auto;}
+  .stagewrap{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;
+             justify-content:center;border-radius:12px;overflow:hidden;background:#000;}
+  video{position:absolute;left:0;top:0;width:100%;height:100%;display:block;object-fit:contain;}
+  canvas#overlay{position:absolute;pointer-events:none;}
+  input[type=file]{width:100%;font-size:13px;color:var(--ink2);margin:8px 0 4px;}
+  .start{background:var(--accent);color:#06301f;width:100%;border:0;border-radius:12px;
+         padding:13px;font-size:16px;font-weight:700;cursor:pointer;margin-top:12px;transition:filter .15s;}
+  .start:hover{filter:brightness(1.05);}
+  .start:disabled{background:#cfc6b2;color:#8a8270;cursor:not-allowed;}
+  .ghost{background:#efe6d2;border:1px solid #e0d3b6;color:var(--ink);width:100%;border-radius:12px;
+          padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px;}
+  .status{margin-top:14px;padding:13px;border-radius:12px;background:#fbf6ea;border:1px solid #e8dcc2;font-size:14px;line-height:1.45;}
+  .badge{display:inline-block;padding:3px 11px;border-radius:20px;font-size:12px;font-weight:700;letter-spacing:.3px;}
+  .b-idle{background:#e6dcc6;color:#6a6354} .b-search{background:#f4e6c8;color:var(--warn)}
+  .b-lock{background:#d7f0df;color:#1d7d44} .b-fail{background:#f4d8d2;color:var(--bad)}
+  .metric{font-variant-numeric:tabular-nums;color:var(--ink2);font-size:12px;margin-top:8px;}
+  .hint{color:var(--ink2);font-size:12px;margin-top:10px;}
+
+  /* 3-dots + rotate hint: desktop hides them; phone shows */
+  .menubtn{display:none;background:#efe6d2;border:1px solid #e0d3b6;border-radius:12px;
+           width:40px;height:40px;font-size:22px;line-height:1;cursor:pointer;color:var(--ink);}
+  #rotateHint{display:none;}
+  #drawerScrim{display:none;}
+
+  /* ---------- phone layout ---------- */
+  @media (max-width: 900px){
+    #view-mode{justify-content:flex-start;align-items:stretch;overflow:hidden;}
+    .panel{padding:0;width:100%;height:100vh;height:100dvh;overflow:hidden;}
+    .panelhead{margin:0;padding:8px 10px;gap:8px;}
+    .panelhead h2{font-size:16px;}
+    .menubtn{display:inline-flex;align-items:center;justify-content:center;}
+    .grid{flex-direction:column;gap:0;height:calc(100vh - 56px);height:calc(100dvh - 56px);}
+    .stage{flex:1 1 auto;min-height:0;}
+    .stagewrap{height:100%;min-height:0;border-radius:0;}
+    .stage .hint{display:none;}
+
+    /* rotate-to-landscape hint overlay (portrait only) */
+    #rotateHint{position:absolute;inset:0;z-index:30;display:flex;align-items:center;
+                justify-content:center;background:rgba(10,10,10,.78);padding:24px;}
+    .rotbox{color:#fff;font-size:17px;text-align:center;line-height:1.5;max-width:280px;}
+    .rotbox button{margin-top:16px;background:#2ecc71;color:#06301f;border:0;border-radius:12px;
+                   padding:12px 22px;font-size:16px;font-weight:700;}
+    #rotateHint.gone{display:none;}
+    @media (orientation:landscape){ #rotateHint{display:none;} }
+
+    /* side panel becomes a slide-in left drawer */
+    .side{position:fixed;top:0;left:0;height:100vh;height:100dvh;width:84vw;max-width:340px;
+          z-index:40;background:rgba(250,246,234,.96);backdrop-filter:blur(3px);
+          padding:16px;overflow:auto;box-shadow:2px 0 24px rgba(0,0,0,.3);
+          transform:translateX(-104%);transition:transform .28s ease;}
+    .side.open{transform:translateX(0);}
+    #drawerScrim{display:block;position:fixed;inset:0;z-index:35;background:rgba(0,0,0,0);
+                 pointer-events:none;transition:background .28s;}
+    #drawerScrim.open{background:rgba(0,0,0,.35);pointer-events:auto;}
+
+    .start{padding:16px;font-size:17px;margin-top:12px;}
+    .ghost{padding:14px;font-size:15px;}
+
+    .choices{flex-direction:column;width:100%;}
+    .btn{width:100%;min-width:0;}
+    h1.title{font-size:27px;}
+    .logo{width:92px;height:92px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- floating court / ball motifs -->
+<div class="bg">
+  <!-- court outline motif -->
+  <svg class="m1" viewBox="0 0 100 140"><g fill="none" stroke="#7a6a45" stroke-width="2">
+    <rect x="8" y="6" width="84" height="128" rx="2"/><line x1="8" y1="70" x2="92" y2="70"/>
+    <line x1="8" y1="48" x2="92" y2="48"/><line x1="8" y1="92" x2="92" y2="92"/><line x1="50" y1="6" x2="50" y2="48"/><line x1="50" y1="92" x2="50" y2="134"/>
+  </g></svg>
+  <!-- ball motif -->
+  <svg class="m2" viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="#9c8a5e"/>
+    <g fill="#f4ecdd"><circle cx="34" cy="30" r="5"/><circle cx="60" cy="26" r="5"/><circle cx="72" cy="50" r="5"/>
+    <circle cx="58" cy="72" r="5"/><circle cx="30" cy="64" r="5"/><circle cx="46" cy="48" r="5"/></g></svg>
+  <svg class="m3" viewBox="0 0 100 140"><g fill="none" stroke="#80714b" stroke-width="2">
+    <rect x="8" y="6" width="84" height="128" rx="2"/><line x1="8" y1="70" x2="92" y2="70"/>
+    <line x1="8" y1="48" x2="92" y2="48"/><line x1="8" y1="92" x2="92" y2="92"/></g></svg>
+  <svg class="m4" viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="#a8966a"/>
+    <g fill="#f4ecdd"><circle cx="34" cy="30" r="5"/><circle cx="60" cy="26" r="5"/><circle cx="72" cy="50" r="5"/>
+    <circle cx="58" cy="72" r="5"/><circle cx="30" cy="64" r="5"/></g></svg>
+  <svg class="m5" viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="#94835a"/>
+    <g fill="#f4ecdd"><circle cx="40" cy="32" r="5"/><circle cx="64" cy="44" r="5"/><circle cx="46" cy="64" r="5"/></g></svg>
+</div>
+
+<!-- ===================== LANDING VIEW ===================== -->
+<section class="view active" id="view-landing">
+  <svg class="logo" viewBox="0 0 120 120">
+    <circle cx="60" cy="60" r="56" fill="#141210"/>
+    <circle cx="60" cy="60" r="46" fill="#cdb56e"/>
+    <g fill="#141210"><circle cx="44" cy="40" r="6"/><circle cx="74" cy="36" r="6"/><circle cx="86" cy="60" r="6"/>
+      <circle cx="70" cy="84" r="6"/><circle cx="40" cy="74" r="6"/><circle cx="56" cy="58" r="6"/></g>
+  </svg>
+  <h1 class="title">Court Calibration</h1>
+  <p class="sub">Place the camera at the recommended spot and choose a source. The system locks onto the court and highlights the near-half region of interest.</p>
+  <div class="choices">
+    <button class="btn" onclick="go('upload')"><span class="ico">⬆</span>Upload a video</button>
+    <button class="btn" onclick="go('camera')"><span class="ico">◉</span>Use camera</button>
+  </div>
+</section>
+
+<!-- ===================== MODE VIEW ===================== -->
+<section class="view" id="view-mode">
+  <div class="panel">
+    <div class="panelhead">
+      <button class="menubtn" id="menuBtn" onclick="toggleDrawer()" aria-label="Menu">⋮</button>
+      <button class="back" onclick="back()">← Back</button>
+      <h2 id="modeTitle">Source</h2>
+    </div>
+    <div class="grid">
+      <div class="stage">
+        <div class="stagewrap">
+          <video id="video" playsinline muted></video>
+          <canvas id="overlay"></canvas>
+          <canvas id="editlayer" style="position:absolute;left:0;top:0;display:none;cursor:grab;"></canvas>
+          <div id="rotateHint">
+            <div class="rotbox">↻ Rotate your phone to landscape for the best view
+              <button onclick="dismissRotate()">Got it</button>
+            </div>
+          </div>
+        </div>
+        <div class="hint" id="srcHint">No source loaded.</div>
+      </div>
+      <div id="drawerScrim" onclick="toggleDrawer()"></div>
+      <div class="side" id="sidePanel">
+        <div id="uploadBox">
+          <input type="file" id="fileInput" accept="video/*">
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin:10px 0 2px;font-size:14px;cursor:pointer;">
+          <input type="checkbox" id="adjustChk"> Adjust keypoints before ROI
+        </label>
+        <div id="zoomRow" style="display:none;align-items:center;gap:8px;margin:10px 0 2px;">
+          <span style="font-size:13px;color:var(--ink2);">Zoom</span>
+          <input type="range" id="zoomSlider" min="1" max="4" step="0.1" value="1" style="flex:1;"
+                 oninput="applyZoom(this.value)">
+          <span id="zoomVal" style="font-size:13px;width:34px;">1.0x</span>
+        </div>
+        <button class="start" id="startBtn" disabled>Start</button>
+        <button class="start" id="confirmBtn" style="display:none;background:#2f6fb0;color:#fff;">Confirm points → ROI</button>
+        <button class="ghost" id="resetBtn">Reset</button>
+        <div class="status">
+          <span class="badge b-idle" id="badge">IDLE</span>
+          <div id="statusText" style="margin-top:8px;">Choose a source to begin.</div>
+          <div class="metric" id="metric"></div>
+        </div>
+        <div class="hint">Lock-on keeps the lowest re-projection-error frame in the window, then freezes the homography for the session.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// ---------- view router ----------
+let CURRENT_MODE = null;
+function show(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function go(modeName){
+  CURRENT_MODE = modeName;
+  document.getElementById('modeTitle').textContent =
+    modeName==='upload' ? 'Upload a video' : 'Use camera';
+  document.getElementById('uploadBox').style.display = modeName==='upload' ? 'block':'none';
+  show('view-mode');
+  const isPhone = window.matchMedia('(max-width: 900px)').matches;
+  if (modeName==='camera'){
+    initCamera();
+    if (isPhone){ showRotateHint(); openDrawer(); }   // hint + controls drawer open initially
+  } else {
+    srcHint.textContent='Choose a file.';
+    if (isPhone) openDrawer();
+  }
+}
+function back(){ resetAll(); stopCamera(); closeDrawer(); show('view-landing'); }
+
+// ---------- phone drawer + rotate hint ----------
+function openDrawer(){ document.getElementById('sidePanel').classList.add('open');
+  document.getElementById('drawerScrim').classList.add('open'); }
+function closeDrawer(){ document.getElementById('sidePanel').classList.remove('open');
+  document.getElementById('drawerScrim').classList.remove('open'); }
+function toggleDrawer(){ document.getElementById('sidePanel').classList.contains('open') ? closeDrawer() : openDrawer(); }
+function showRotateHint(){ const r=document.getElementById('rotateHint'); if(r) r.classList.remove('gone'); }
+function dismissRotate(){ const r=document.getElementById('rotateHint'); if(r) r.classList.add('gone'); }
+
+// ---------- elements ----------
+const video=document.getElementById('video'), overlay=document.getElementById('overlay');
+const octx=overlay.getContext('2d');
+const startBtn=document.getElementById('startBtn'), resetBtn=document.getElementById('resetBtn');
+const fileInput=document.getElementById('fileInput');
+const badge=document.getElementById('badge'), statusText=document.getElementById('statusText');
+const metric=document.getElementById('metric'), srcHint=document.getElementById('srcHint');
+let stream=null, running=false, sendTimer=null, locked=false, lastPoly=null;
+const grab=document.createElement('canvas'), gctx=grab.getContext('2d');
+
+function setBadge(c,t){badge.className='badge '+c;badge.textContent=t;}
+const stagewrap=document.querySelector('.stagewrap');
+// compute the displayed rect of the video image inside the stagewrap (object-fit:contain)
+function videoDisplayRect(){
+  const vw = video.videoWidth || 16, vh = video.videoHeight || 9;
+  const bw = stagewrap.clientWidth, bh = stagewrap.clientHeight;
+  const scale = Math.min(bw / vw, bh / vh);
+  const dw = vw * scale, dh = vh * scale;
+  return { dw, dh, left:(bw-dw)/2, top:(bh-dh)/2, vw, vh, bw, bh };
+}
+function placeCanvas(cnv){
+  const r=videoDisplayRect();
+  cnv.width = r.vw; cnv.height = r.vh;             // internal res = source px (points map 1:1)
+  cnv.style.width = r.dw+'px'; cnv.style.height = r.dh+'px';
+  cnv.style.left = r.left+'px'; cnv.style.top = r.top+'px';
+}
+function sizeOverlay(){
+  if(!stagewrap.clientWidth || !stagewrap.clientHeight) return;
+  placeCanvas(overlay);
+}
+
+// ---------- sources ----------
+fileInput.addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  video.srcObject=null; video.src=URL.createObjectURL(f); video.loop=true; video.muted=true;
+  srcHint.textContent='Loaded: '+f.name;
+  startBtn.disabled=false;                 // enable immediately; don't wait on loadeddata
+  video.onloadeddata=()=>{ video.play().catch(()=>{}); sizeOverlay(); };
+  video.onloadedmetadata=sizeOverlay;
+  video.play().catch(()=>{});              // try to start playback (muted autoplay is allowed)
+});
+let camTrack=null, zoomCaps=null;
+async function initCamera(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080} }
+    });   // facingMode 'environment' = rear camera on phones
+    video.src=''; video.srcObject=stream; await video.play();
+    video.loop=false;
+    video.onloadeddata=sizeOverlay; sizeOverlay();
+    startBtn.disabled=false; srcHint.textContent='Camera live.';
+    // set up zoom (native optical/digital where the device supports it)
+    camTrack = stream.getVideoTracks()[0];
+    const caps = camTrack.getCapabilities ? camTrack.getCapabilities() : {};
+    zoomCaps = caps.zoom || null;
+    setupZoomUI();
+  }catch(err){srcHint.textContent='Camera error: '+err.message+' (camera needs HTTPS on a phone)';}
+}
+function stopCamera(){ if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;camTrack=null;} }
+
+// ---------- zoom ----------
+let cssZoom=1;
+function setupZoomUI(){
+  const z=document.getElementById('zoomRow'); if(!z) return;
+  z.style.display='flex';
+  const sl=document.getElementById('zoomSlider');
+  if(zoomCaps){ sl.min=zoomCaps.min; sl.max=zoomCaps.max; sl.step=zoomCaps.step||0.1; sl.value=zoomCaps.min; }
+  else { sl.min=1; sl.max=4; sl.step=0.1; sl.value=1; }   // CSS-scale fallback
+}
+function applyZoom(v){
+  v=parseFloat(v);
+  if(zoomCaps && camTrack){ camTrack.applyConstraints({advanced:[{zoom:v}]}).catch(()=>{}); }
+  else { cssZoom=v; video.style.transform='scale('+v+')'; video.style.transformOrigin='center center'; }
+  document.getElementById('zoomVal').textContent = v.toFixed(1)+'x';
+}
+
+// ---------- adjust-mode elements/state ----------
+const adjustChk=document.getElementById('adjustChk');
+const confirmBtn=document.getElementById('confirmBtn');
+const editlayer=document.getElementById('editlayer');
+const ectx=editlayer.getContext('2d');
+let editPts=null, dragIdx=-1, editing=false;
+const HIT_R=14;   // px hit radius for grabbing a dot (in displayed space)
+
+// ---------- start ----------
+startBtn.addEventListener('click',async()=>{
+  try{ await fetch('/api/start',{method:'POST'}); }
+  catch(e){ statusText.textContent='Cannot reach server. Is app_calib.py running?'; return; }
+  if(adjustChk.checked){ enterAdjust(); return; }
+  if(video.paused){ try{ await video.play(); }catch(e){} }
+  running=true;locked=false;startBtn.disabled=true;
+  setBadge('b-search','SEARCHING');statusText.textContent='Looking for the court…';
+  closeDrawer();                 // on phone: get out of the way so you see the live feed
+  loop();
+});
+
+// ---------- ADJUST MODE: freeze frame -> predict -> drag -> confirm ----------
+async function enterAdjust(){
+  if(video.paused){ try{ await video.play(); }catch(e){} }
+  video.pause();                                   // freeze on the first frame
+  startBtn.disabled=true; setBadge('b-search','PREDICTING');
+  statusText.textContent='Predicting keypoints on this frame…';
+  const w=video.videoWidth,h=video.videoHeight;
+  grab.width=w;grab.height=h;gctx.drawImage(video,0,0,w,h);
+  let j;
+  try{
+    const res=await fetch('/api/predict_frame',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({image:grab.toDataURL('image/jpeg',0.7)})});
+    j=await res.json();
+  }catch(e){ statusText.textContent='Prediction failed (server unreachable).'; startBtn.disabled=false; return; }
+  if(!j.ok){ setBadge('b-fail','FAILED'); statusText.textContent='Could not predict points: '+(j.error||'');
+    startBtn.disabled=false; return; }
+  editPts=j.points.map(p=>[p[0],p[1],p[2]]);       // [x,y,v] in source px
+  editing=true;
+  setBadge('b-search','ADJUST'); statusText.textContent='Drag any point to correct it, then Confirm.';
+  metric.textContent = j.reproj_px!=null ? ('model error: '+j.reproj_px+' px') : '';
+  confirmBtn.style.display='block'; startBtn.style.display='none';
+  setupEditLayer(); drawEdit();
+}
+
+function setupEditLayer(){
+  placeCanvas(overlay);
+  placeCanvas(editlayer);     // same rect as the video image -> points land on the court
+  editlayer.style.display='block';
+}
+function dispScale(){ return (parseFloat(editlayer.style.width)||editlayer.width)/editlayer.width; }
+
+function drawEdit(){
+  ectx.clearRect(0,0,editlayer.width,editlayer.height);
+  if(!editPts) return;
+  // faint ROI preview from current points
+  ectx.lineWidth=2;
+  for(let i=0;i<editPts.length;i++){
+    const [x,y,v]=editPts[i];
+    ectx.beginPath(); ectx.arc(x,y,9,0,7);
+    ectx.fillStyle = (i===dragIdx)?'#ffd54a':(v>=2?'#2ecc71':'#e67e22');
+    ectx.fill(); ectx.lineWidth=2; ectx.strokeStyle='#0a0a0a'; ectx.stroke();
+    ectx.fillStyle='#fff'; ectx.font='bold 13px sans-serif'; ectx.textAlign='center';
+    ectx.fillText(i, x, y-13);
+  }
+}
+
+function evtToSrc(e){
+  const r=editlayer.getBoundingClientRect();
+  const s=dispScale();
+  return [ (e.clientX-r.left)/s, (e.clientY-r.top)/s ];
+}
+editlayer.addEventListener('pointerdown',e=>{
+  if(!editing||!editPts) return;
+  const [mx,my]=evtToSrc(e);
+  let best=-1,bd=1e9;
+  editPts.forEach((p,i)=>{const d=Math.hypot(p[0]-mx,p[1]-my); if(d<bd){bd=d;best=i;}});
+  if(bd <= HIT_R/dispScale()){ dragIdx=best; editlayer.style.cursor='grabbing'; drawEdit(); editlayer.setPointerCapture(e.pointerId);}
+});
+editlayer.addEventListener('pointermove',e=>{
+  if(dragIdx<0) return;
+  const [mx,my]=evtToSrc(e);
+  editPts[dragIdx][0]=Math.max(0,Math.min(editlayer.width,mx));
+  editPts[dragIdx][1]=Math.max(0,Math.min(editlayer.height,my));
+  if(editPts[dragIdx][2]<2) editPts[dragIdx][2]=2;   // moving a point makes it visible
+  drawEdit();
+});
+editlayer.addEventListener('pointerup',e=>{ dragIdx=-1; editlayer.style.cursor='grab'; drawEdit(); });
+
+confirmBtn.addEventListener('click',async()=>{
+  if(!editPts) return;
+  confirmBtn.disabled=true; statusText.textContent='Computing ROI…';
+  let j;
+  try{
+    const res=await fetch('/api/confirm_points',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({points:editPts})});
+    j=await res.json();
+  }catch(e){ statusText.textContent='Server unreachable.'; confirmBtn.disabled=false; return; }
+  if(!j.ok){ setBadge('b-fail','FAILED'); statusText.textContent='Could not compute ROI: '+(j.error||'');
+    confirmBtn.disabled=false; return; }
+  // leave edit mode, lock the ROI, resume playback with overlay
+  editing=false; editlayer.style.display='none'; confirmBtn.style.display='none';
+  confirmBtn.disabled=false; startBtn.style.display='block';
+  locked=true; running=true;
+  setBadge('b-lock','LOCKED'); statusText.textContent='Court locked (adjusted). Near-half ROI active.';
+  metric.textContent='re-projection error: '+j.reproj_px+' px';
+  drawPoly(j.polygon,true);
+  try{ await video.play(); }catch(e){}
+  loop();   // after lock, loop just keeps the frozen ROI sized to the video
+});
+
+resetBtn.addEventListener('click',resetAll);
+function resetAll(){
+  running=false;locked=false;editing=false;editPts=null;dragIdx=-1;lastPoly=null;
+  if(sendTimer)clearTimeout(sendTimer);
+  fetch('/api/reset',{method:'POST'}).catch(()=>{});
+  octx.clearRect(0,0,overlay.width,overlay.height);
+  ectx.clearRect(0,0,editlayer.width,editlayer.height);
+  editlayer.style.display='none';
+  confirmBtn.style.display='none'; startBtn.style.display='block';
+  setBadge('b-idle','IDLE');statusText.textContent='Ready. Press Start.';metric.textContent='';
+  // keep the feed alive: resume the camera/video so you DON'T have to go Back and reselect
+  if(video.srcObject || video.src){ video.play().catch(()=>{}); }
+  startBtn.disabled=!(video.src||video.srcObject);
+}
+async function loop(){
+  if(!running)return;
+  // after lock (manual or auto): don't re-post, just keep the frozen ROI aligned to the video
+  if(locked){ if(lastPoly) drawPoly(lastPoly,true); sendTimer=setTimeout(loop,400); return; }
+  const w=video.videoWidth,h=video.videoHeight;
+  if(w&&h){
+    grab.width=w;grab.height=h;gctx.drawImage(video,0,0,w,h);
+    try{
+      const res=await fetch('/api/frame',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({image:grab.toDataURL('image/jpeg',0.7)})});
+      handle(await res.json());
+    }catch(e){}
+  }
+  sendTimer=setTimeout(loop,200);
+}
+function handle(j){
+  if(j.status==='locked'){locked=true;setBadge('b-lock','LOCKED');
+    statusText.textContent='Court locked. Near-half ROI active.';
+    metric.textContent='re-projection error: '+j.reproj_px+' px';drawPoly(j.polygon,true);}
+  else if(j.status==='searching'){setBadge('b-search','SEARCHING');
+    statusText.textContent='Looking for the court…  '+(j.elapsed||0)+'s';
+    metric.textContent=j.best_px?('best so far: '+j.best_px+' px'):'';
+    if(j.preview_polygon)drawPoly(j.preview_polygon,false);}
+  else if(j.status==='failed'){running=false;setBadge('b-fail','FAILED');
+    statusText.textContent=j.message;
+    metric.textContent=j.best_px?('best reached: '+j.best_px+' px'):'';startBtn.disabled=false;}
+}
+function drawPoly(poly,lockedStyle){
+  lastPoly=poly;
+  sizeOverlay();octx.clearRect(0,0,overlay.width,overlay.height);
+  if(!poly||!poly.length)return;
+  octx.beginPath();poly.forEach((p,i)=>i?octx.lineTo(p[0],p[1]):octx.moveTo(p[0],p[1]));octx.closePath();
+  octx.fillStyle=lockedStyle?'rgba(46,204,113,0.30)':'rgba(47,111,176,0.18)';octx.fill();
+  octx.lineWidth=3;octx.strokeStyle=lockedStyle?'#2ecc71':'#2f6fb0';octx.stroke();
+}
+window.addEventListener('resize',()=>{if(locked)sizeOverlay();});
+</script>
+</body>
+</html>

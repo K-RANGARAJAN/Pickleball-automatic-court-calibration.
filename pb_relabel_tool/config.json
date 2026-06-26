@@ -1,0 +1,11 @@
+{
+  "api_url": "https://serverless.roboflow.com",
+  "api_key": "mkGwXSfuxNT3huj9xtZO",
+  "model_id": "pb-9bsin/4",
+  "images_dir": "../images",
+  "work_dir": "../pb_relabel",
+  "confidence_threshold": 0.0,
+  "bbox_pad_frac": 0.02,
+  "val_split": 0.2,
+  "seed": 42
+}

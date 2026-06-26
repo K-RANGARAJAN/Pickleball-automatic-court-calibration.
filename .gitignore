@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Datasets / images / videos
+images/
+clips_frames/
+calib_check/
+pb_relabel/
+pb_relabel_new/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+# Model weights
+*.pt
+*.pth
+*.onnx
+*.weights
+*.bin
+
+# Zipped datasets
+*.zip
+*.tar.gz
+*.tgz
+
+# YOLO training output
+runs/
+
+# Generated reports / undo logs
+validate_labels_report.csv
+pb_relabel_tool/pad_rename_undo.csv
