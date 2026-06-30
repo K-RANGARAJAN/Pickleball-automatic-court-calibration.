@@ -137,6 +137,40 @@ def net_line_image(H_inv):
     return (int(l[0]), int(l[1])), (int(r[0]), int(r[1]))
 
 
+def near_half_wireframe(H_inv):
+    """
+    Near-half wireframe in IMAGE coords, computed from the homography so derived
+    net points are exact. Returns {'dots': [[x,y],...], 'lines': [[[x,y],[x,y]],...]}.
+
+    Dots: net L / net M / net R (derived), kitchen 6/7/8, baseline 9/10/11.
+    Lines: net (L-R), left side (netL->base11), right side (netR->base9),
+           kitchen (6-8), center serve line kitchen->baseline (7-10).
+    """
+    def P(cx, cy):
+        v = _to_img(H_inv, cx, cy)
+        return [int(round(v[0])), int(round(v[1]))]
+
+    # court-space coords
+    netL, netM, netR = P(0, NET_Y), P(COURT_W / 2, NET_Y), P(COURT_W, NET_Y)
+    k6 = P(0, NET_Y + KITCHEN)            # fg kitchen L
+    k7 = P(COURT_W / 2, NET_Y + KITCHEN)  # fg kitchen M
+    k8 = P(COURT_W, NET_Y + KITCHEN)      # fg kitchen R
+    b11 = P(0, COURT_L)                   # near baseline L
+    b10 = P(COURT_W / 2, COURT_L)         # near baseline M
+    b9 = P(COURT_W, COURT_L)              # near baseline R
+
+    dots = [netL, netM, netR, k6, k7, k8, b9, b10, b11]
+    lines = [
+        [netL, netR],   # net line
+        [netL, b11],    # left side of near ROI
+        [netR, b9],     # right side of near ROI
+        [b11, b9],      # near baseline (left -> right)
+        [k6, k8],       # kitchen line
+        [k7, b10],      # center serve line: kitchen-mid -> baseline-mid
+    ]
+    return {"dots": dots, "lines": lines}
+
+
 # ---------------------------------------------------------------------------
 # 5. OPTIONAL net LINE-REFINE  (snap to brightest nearby pixels)
 # ---------------------------------------------------------------------------

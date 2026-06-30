@@ -81,6 +81,14 @@
   .b-lock{background:#d7f0df;color:#1d7d44} .b-fail{background:#f4d8d2;color:var(--bad)}
   .metric{font-variant-numeric:tabular-nums;color:var(--ink2);font-size:12px;margin-top:8px;}
   .hint{color:var(--ink2);font-size:12px;margin-top:10px;}
+  /* toggle switch */
+  .switch{position:relative;display:inline-block;width:44px;height:24px;flex:0 0 auto;}
+  .switch input{opacity:0;width:0;height:0;}
+  .switch .slider{position:absolute;inset:0;background:#cfc6b2;border-radius:24px;transition:.2s;}
+  .switch .slider:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;
+    background:#fff;border-radius:50%;transition:.2s;}
+  .switch input:checked + .slider{background:#2ecc71;}
+  .switch input:checked + .slider:before{transform:translateX(20px);}
 
   /* 3-dots + rotate hint: desktop hides them; phone shows */
   .menubtn{display:none;background:#efe6d2;border:1px solid #e0d3b6;border-radius:12px;
@@ -207,6 +215,10 @@
         <button class="start" id="startBtn" disabled>Start</button>
         <button class="start" id="confirmBtn" style="display:none;background:#2f6fb0;color:#fff;">Confirm points → ROI</button>
         <button class="ghost" id="resetBtn">Reset</button>
+        <label class="switchrow" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 2px;font-size:14px;cursor:pointer;">
+          <span>Show lines</span>
+          <span class="switch"><input type="checkbox" id="linesToggle" onchange="toggleLines()"><span class="slider"></span></span>
+        </label>
         <div class="status">
           <span class="badge b-idle" id="badge">IDLE</span>
           <div id="statusText" style="margin-top:8px;">Choose a source to begin.</div>
@@ -258,7 +270,7 @@ const startBtn=document.getElementById('startBtn'), resetBtn=document.getElement
 const fileInput=document.getElementById('fileInput');
 const badge=document.getElementById('badge'), statusText=document.getElementById('statusText');
 const metric=document.getElementById('metric'), srcHint=document.getElementById('srcHint');
-let stream=null, running=false, sendTimer=null, locked=false, lastPoly=null;
+let stream=null, running=false, sendTimer=null, locked=false, lastPoly=null, lastWire=null, showLines=false;
 const grab=document.createElement('canvas'), gctx=grab.getContext('2d');
 
 function setBadge(c,t){badge.className='badge '+c;badge.textContent=t;}
@@ -432,14 +444,15 @@ confirmBtn.addEventListener('click',async()=>{
   locked=true; running=true;
   setBadge('b-lock','LOCKED'); statusText.textContent='Court locked (adjusted). Near-half ROI active.';
   metric.textContent='re-projection error: '+j.reproj_px+' px';
-  drawPoly(j.polygon,true);
+  drawPoly(j.polygon,true,j.wire);
   try{ await video.play(); }catch(e){}
   loop();   // after lock, loop just keeps the frozen ROI sized to the video
 });
 
 resetBtn.addEventListener('click',resetAll);
 function resetAll(){
-  running=false;locked=false;editing=false;editPts=null;dragIdx=-1;lastPoly=null;
+  running=false;locked=false;editing=false;editPts=null;dragIdx=-1;lastPoly=null;lastWire=null;
+  showLines=false; var lt=document.getElementById('linesToggle'); if(lt) lt.checked=false;
   if(sendTimer)clearTimeout(sendTimer);
   fetch('/api/reset',{method:'POST'}).catch(()=>{});
   octx.clearRect(0,0,overlay.width,overlay.height);
@@ -454,7 +467,7 @@ function resetAll(){
 async function loop(){
   if(!running)return;
   // after lock (manual or auto): don't re-post, just keep the frozen ROI aligned to the video
-  if(locked){ if(lastPoly) drawPoly(lastPoly,true); sendTimer=setTimeout(loop,400); return; }
+  if(locked){ if(lastPoly) drawPoly(lastPoly,true,lastWire); sendTimer=setTimeout(loop,400); return; }
   const w=video.videoWidth,h=video.videoHeight;
   if(w&&h){
     grab.width=w;grab.height=h;gctx.drawImage(video,0,0,w,h);
@@ -469,7 +482,7 @@ async function loop(){
 function handle(j){
   if(j.status==='locked'){locked=true;setBadge('b-lock','LOCKED');
     statusText.textContent='Court locked. Near-half ROI active.';
-    metric.textContent='re-projection error: '+j.reproj_px+' px';drawPoly(j.polygon,true);}
+    metric.textContent='re-projection error: '+j.reproj_px+' px';drawPoly(j.polygon,true,j.wire);}
   else if(j.status==='searching'){setBadge('b-search','SEARCHING');
     statusText.textContent='Looking for the court…  '+(j.elapsed||0)+'s';
     metric.textContent=j.best_px?('best so far: '+j.best_px+' px'):'';
@@ -478,13 +491,28 @@ function handle(j){
     statusText.textContent=j.message;
     metric.textContent=j.best_px?('best reached: '+j.best_px+' px'):'';startBtn.disabled=false;}
 }
-function drawPoly(poly,lockedStyle){
-  lastPoly=poly;
+function drawPoly(poly,lockedStyle,wire){
+  lastPoly=poly; if(wire!==undefined) lastWire=wire;
   sizeOverlay();octx.clearRect(0,0,overlay.width,overlay.height);
   if(!poly||!poly.length)return;
   octx.beginPath();poly.forEach((p,i)=>i?octx.lineTo(p[0],p[1]):octx.moveTo(p[0],p[1]));octx.closePath();
   octx.fillStyle=lockedStyle?'rgba(46,204,113,0.30)':'rgba(47,111,176,0.18)';octx.fill();
   octx.lineWidth=3;octx.strokeStyle=lockedStyle?'#2ecc71':'#2f6fb0';octx.stroke();
+  // near-half wireframe: bright-red lines + yellow dots (only when "Show lines" is on)
+  const w = (wire!==undefined)?wire:lastWire;
+  if(showLines && w && w.lines){
+    octx.strokeStyle='#ff0000'; octx.lineWidth=3;
+    w.lines.forEach(seg=>{ octx.beginPath(); octx.moveTo(seg[0][0],seg[0][1]);
+      octx.lineTo(seg[1][0],seg[1][1]); octx.stroke(); });
+  }
+  if(showLines && w && w.dots){
+    octx.fillStyle='#ffff00';
+    w.dots.forEach(d=>{ octx.beginPath(); octx.arc(d[0],d[1],8,0,7); octx.fill(); });
+  }
+}
+function toggleLines(){
+  showLines=document.getElementById('linesToggle').checked;
+  if(lastPoly) drawPoly(lastPoly,true,lastWire);   // redraw immediately with new state
 }
 window.addEventListener('resize',()=>{if(locked)sizeOverlay();});
 </script>

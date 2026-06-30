@@ -115,6 +115,7 @@ SESSION = {
     "locked": False,
     "H_inv": None,
     "poly": None,
+    "wire": None,
     "best_err": float("inf"),
     "lock_started": None,
     "lock_window_s": 10.0,
@@ -123,7 +124,7 @@ SESSION = {
 
 
 def reset_session():
-    SESSION.update(locked=False, H_inv=None, poly=None,
+    SESSION.update(locked=False, H_inv=None, poly=None, wire=None,
                    best_err=float("inf"), lock_started=None)
 
 
@@ -162,7 +163,7 @@ def api_frame():
 
     # already locked -> just return the frozen ROI (cheap; no re-inference needed)
     if SESSION["locked"]:
-        return jsonify({"locked": True, "polygon": SESSION["poly"],
+        return jsonify({"locked": True, "polygon": SESSION["poly"], "wire": SESSION["wire"],
                         "reproj_px": round(SESSION["best_err"], 2), "status": "locked"})
 
     # within lock window: score this frame
@@ -180,6 +181,7 @@ def api_frame():
             SESSION["best_err"] = err
             SESSION["H_inv"] = H_inv.tolist()
             SESSION["poly"] = cc.near_half_polygon(H_inv).tolist()
+            SESSION["wire"] = cc.near_half_wireframe(H_inv)
     except Exception as e:
         err = None
         print(f"  [frame] PREDICT/HOMOGRAPHY FAILED: {repr(e)[:140]}", flush=True)
@@ -188,7 +190,7 @@ def api_frame():
     window_done = elapsed >= SESSION["lock_window_s"]
     if SESSION["best_err"] < SESSION["lock_thresh_px"] and (window_done or SESSION["best_err"] < 4.0):
         SESSION["locked"] = True
-        return jsonify({"locked": True, "polygon": SESSION["poly"],
+        return jsonify({"locked": True, "polygon": SESSION["poly"], "wire": SESSION["wire"],
                         "reproj_px": round(SESSION["best_err"], 2), "status": "locked"})
     if window_done:
         return jsonify({"locked": False, "status": "failed",
@@ -249,8 +251,9 @@ def api_confirm_points():
     SESSION["locked"] = True
     SESSION["H_inv"] = H_inv.tolist()
     SESSION["poly"] = cc.near_half_polygon(H_inv).tolist()
+    SESSION["wire"] = cc.near_half_wireframe(H_inv)
     SESSION["best_err"] = m["mean_px"]
-    return jsonify({"ok": True, "locked": True, "polygon": SESSION["poly"],
+    return jsonify({"ok": True, "locked": True, "polygon": SESSION["poly"], "wire": SESSION["wire"],
                     "reproj_px": round(m["mean_px"], 2)})
 
 

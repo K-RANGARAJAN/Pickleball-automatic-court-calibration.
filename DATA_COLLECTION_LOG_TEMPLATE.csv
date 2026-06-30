@@ -1,0 +1,11 @@
+filename,date,session,camera,fps,resolution,content_type,sync_event,occluded_camera,gt_markers_present,gt_marker_coords,notes
+2026-07-10_S1_camA_clip001.mov,2026-07-10,S1,A,60,1080p,calibration-intrinsics,n,,n,,checkerboard sweep camera A
+2026-07-10_S1_camB_clip001.mov,2026-07-10,S1,B,60,1080p,calibration-intrinsics,n,,n,,checkerboard sweep camera B
+2026-07-10_S1_camA_clip002.mov,2026-07-10,S1,A,60,1080p,empty-court,n,,n,,court reference camera A
+2026-07-10_S1_camB_clip002.mov,2026-07-10,S1,B,60,1080p,empty-court,n,,n,,court reference camera B
+2026-07-10_S1_camA_clip003.mov,2026-07-10,S1,A,60,1080p,ground-truth-bounce,y,,y,"(3.0,1.0,0)",bounce on kitchen-line marker
+2026-07-10_S1_camB_clip003.mov,2026-07-10,S1,B,60,1080p,ground-truth-bounce,y,,y,"(3.0,1.0,0)",same bounce seen by B
+2026-07-10_S1_camK_clip003.mov,2026-07-10,S1,K,60,1080p,ground-truth-bounce,y,,y,"(3.0,1.0,0)",kitchen view of same bounce
+2026-07-10_S1_camA_clip004.mov,2026-07-10,S1,A,60,1080p,occlusion,y,A,y,"(0.5,5.0,0)",player blocks camera A view of bounce
+2026-07-10_S1_camB_clip004.mov,2026-07-10,S1,B,60,1080p,occlusion,y,A,y,"(0.5,5.0,0)",B sees bounce clearly
+2026-07-10_S1_camA_clip005.mov,2026-07-10,S1,A,60,1080p,rally,y,,n,,full rally varied speeds
