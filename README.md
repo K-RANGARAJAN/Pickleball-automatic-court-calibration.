@@ -1,4 +1,4 @@
-# Pickleball Automatic Court Calibration
+# Pickleball Automatic Court Calibration System
 
 Automatic near-half court ROI detection for pickleball footage using YOLO-pose keypoint estimation and homography-based calibration.
 
